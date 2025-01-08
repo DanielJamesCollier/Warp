@@ -1,13 +1,42 @@
 #include <winsock2.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <shlobj.h> // For SHGetFolderPath
+#include <string.h>
+#include <stdlib.h>
+#include "file_protocol.h"
 
 #pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "Shell32.lib")
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
-#define HEARTBEAT_MESSAGE "HEARTBEAT"
 
+// Function to create the program folder and return the folder path
+char* createProgramFolder(const char *folderName) {
+    static char programFolderPath[MAX_PATH];  // Static to retain value after function returns
+    char localAppDataPath[MAX_PATH];
+
+    // Get the path to %LOCALAPPDATA%
+    if (SUCCEEDED(SHGetFolderPath(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, localAppDataPath))) {
+        // Create a path for the program's folder
+        snprintf(programFolderPath, MAX_PATH, "%s\\%s", localAppDataPath, folderName);
+
+        // Create the directory if it doesn't exist
+        if (CreateDirectory(programFolderPath, NULL) || GetLastError() == ERROR_ALREADY_EXISTS) {
+            printf("Program folder created or already exists: %s\n", programFolderPath);
+            return programFolderPath; // Return the path of the created folder
+        } else {
+            printf("Failed to create program folder. Error: %lu\n", GetLastError());
+            return NULL; // Failure, folder not created
+        }
+    } else {
+        printf("Failed to get LocalAppData path.\n");
+        return NULL; // Failure to get path
+    }
+}
+
+// Function to wait for a client connection
 SOCKET waitForClient(SOCKET server_socket, struct sockaddr_in *client) {
     int client_len = sizeof(struct sockaddr_in);
     printf("Waiting for incoming connections...\n");
@@ -20,12 +49,75 @@ SOCKET waitForClient(SOCKET server_socket, struct sockaddr_in *client) {
     return client_socket;
 }
 
+// Function to handle file transfer from client
+void handleFileTransfer(SOCKET client_socket, const char *folderPath) {
+    ProtocolHeader header;
+    FileInitMessage init_msg;
+    FileChunkMessage chunk_msg;
+
+    // Receive FileInitMessage
+    if (recv(client_socket, (char *)&header, sizeof(header), 0) <= 0 || header.magic != PROTOCOL_MAGIC || header.type != MSG_TYPE_FILE_INIT) {
+        printf("Error receiving file initialization message.\n");
+        return;
+    }
+    recv(client_socket, (char *)&init_msg, sizeof(init_msg), 0);
+
+    printf("Receiving file: %s, Size: %llu bytes\n", init_msg.filename, init_msg.filesize);
+
+    // Create the full file path in the designated folder
+    char filePath[MAX_PATH];
+    snprintf(filePath, MAX_PATH, "%s\\%s", folderPath, init_msg.filename);
+
+    // Open the file to write to
+    FILE *file = fopen(filePath, "wb");
+    if (!file) {
+        printf("Failed to open file for writing: %s\n", filePath);
+        return;
+    }
+
+    // Receive and write file data in chunks
+    size_t total_received = 0;
+    while (total_received < init_msg.filesize) {
+        if (recv(client_socket, (char *)&header, sizeof(header), 0) <= 0) {
+            printf("Error receiving file chunk.\n");
+            fclose(file);
+            return;
+        }
+
+        int chunk_size = recv(client_socket, chunk_msg.chunk_data, sizeof(chunk_msg.chunk_data), 0);
+        if (chunk_size <= 0) {
+            printf("Error receiving chunk data.\n");
+            fclose(file);
+            return;
+        }
+
+        fwrite(chunk_msg.chunk_data, 1, chunk_size, file);
+        total_received += chunk_size;
+        printf("Received chunk %zu/%llu bytes\n", total_received, init_msg.filesize);
+    }
+
+    // Receive FileCompleteMessage
+    recv(client_socket, (char *)&header, sizeof(header), 0);
+    if (header.type != MSG_TYPE_FILE_COMPLETE) {
+        printf("Error receiving file complete message.\n");
+    } else {
+        printf("File transfer complete.\n");
+    }
+
+    fclose(file);
+}
+
 int main() {
     WSADATA wsa;
     SOCKET server_socket, client_socket;
     struct sockaddr_in server, client;
     char buffer[BUFFER_SIZE];
-    bool heartbeat_received = false;
+
+    // Create the program folder under LocalAppData and get the folder path
+    char *folderPath = createProgramFolder("warp");
+    if (!folderPath) {
+        return 1; // Exit if folder creation failed
+    }
 
     printf("Initializing Winsock...\n");
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
@@ -48,13 +140,36 @@ int main() {
     server.sin_addr.s_addr = INADDR_ANY;
     server.sin_port = htons(PORT);
 
-    // Bind
+    // Bind the socket
     if (bind(server_socket, (struct sockaddr *)&server, sizeof(server)) == SOCKET_ERROR) {
-        printf("Bind failed. Error Code: %d\n", WSAGetLastError());
-        return 1;
-    }
+        int err_code = WSAGetLastError();
+        printf("Bind failed. Error Code: %d\n", err_code);
 
-    printf("Bind done.\n");
+        // Handle different error codes
+        switch (err_code) {
+            case WSAEADDRINUSE:
+                printf("Error: The address is already in use.\n");
+                break;
+            case WSAEADDRNOTAVAIL:
+                printf("Error: The specified address is not available.\n");
+                break;
+            case WSAEACCES:
+                printf("Error: Permission denied (you may need administrator privileges).\n");
+                break;
+            case WSAEAFNOSUPPORT:
+                printf("Error: The address family is not supported.\n");
+                break;
+            case WSAEINVAL:
+                printf("Error: The socket is already bound to a different address.\n");
+                break;
+            default:
+                printf("Unknown error.\n");
+                break;
+        }
+    } else {
+      printf("Bind done.\n");
+      exit(EXIT_FAILURE);
+    }
 
     // Listen
     listen(server_socket, 3);
@@ -65,23 +180,8 @@ int main() {
             break;
         }
 
-        // Receive messages
-        int recv_size;
-        while ((recv_size = recv(client_socket, buffer, BUFFER_SIZE, 0)) > 0) {
-            buffer[recv_size] = '\0';
-            if (strcmp(buffer, HEARTBEAT_MESSAGE) == 0) {
-                printf("Heartbeat received.\n");
-                heartbeat_received = true;
-            } else {
-                printf("Message received: %s\n", buffer);
-            }
-        }
-
-        if (recv_size == SOCKET_ERROR) {
-            printf("Recv failed. Error Code: %d\n", WSAGetLastError());
-        } else {
-            printf("Client disconnected.\n");
-        }
+        // Handle file transfer to the folder created in %LOCALAPPDATA%\warp
+        handleFileTransfer(client_socket, folderPath);
 
         // Close client socket
         closesocket(client_socket);
