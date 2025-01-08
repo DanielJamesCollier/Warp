@@ -22,7 +22,7 @@ typedef enum {
 typedef struct {
   uint32_t magic;   // Protocol magic number
   uint32_t type;    // Message type (MessageType)
-  uint32_t length;  // Length of the payload (excluding header)
+  uint64_t length;  // Length of the payload (excluding header)
 } ProtocolHeader;
 #pragma pack(pop)
 
