@@ -11,7 +11,6 @@
 
 // Message types
 typedef enum {
-    MSG_TYPE_HEARTBEAT = 1,
     MSG_TYPE_FILE_INIT, // File transmission initialization
     MSG_TYPE_FILE_CHUNK, // File chunk
     MSG_TYPE_FILE_COMPLETE // File transmission completion
