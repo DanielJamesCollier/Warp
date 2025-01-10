@@ -68,14 +68,7 @@ void handleFileTransfer(SOCKET client_socket, const char* folderPath)
     FileInitMessage init_msg;
     FileChunkMessage chunk_msg;
 
-    // Receive ProtocolHeader. Then check the header.type  to determine the next message read by recv should be MSG_TYPE_FILE_INIT.
-    if (recv(client_socket, (char*)&header, sizeof(header), 0) <= 0 || header.magic != PROTOCOL_MAGIC || header.type != MSG_TYPE_FILE_INIT) {
-        printf("Error receiving file initialization message.\n");
-        return;
-    }
-    // Read FileInitMessage.
     recv(client_socket, (char*)&init_msg, sizeof(init_msg), 0);
-
     printf("Receiving file: %s, Size: %llu bytes\n", init_msg.filename, init_msg.filesize);
 
     // Create the full file path in the designated folder
@@ -116,6 +109,27 @@ void handleFileTransfer(SOCKET client_socket, const char* folderPath)
     fclose(file);
 }
 
+void handle_command(SOCKET client_socket, const char* folderPath)
+{
+    ProtocolHeader header;
+
+    // Receive ProtocolHeader. Then check the header.type  to determine the next message read by recv should be MSG_TYPE_FILE_INIT.
+    if (recv(client_socket, (char*)&header, sizeof(header), 0) <= 0 || header.magic != PROTOCOL_MAGIC) {
+        printf("Error receiving file initialization message.\n");
+        return;
+    }
+
+    switch (header.type) {
+    case MSG_TYPE_FILE_INIT: {
+        handleFileTransfer(client_socket, folderPath);
+        break;
+    }
+    default: {
+        puts("unsupported command.");
+    }
+    }
+}
+
 int main()
 {
     WSADATA wsa;
@@ -136,7 +150,6 @@ int main()
 
     printf("Winsock initialized.\n");
 
-    // Create socket
     if ((server_socket = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
         printf("Could not create socket: %d\n", WSAGetLastError());
         return 1;
@@ -144,17 +157,14 @@ int main()
 
     printf("Socket created.\n");
 
-    // Prepare sockaddr_in structure
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = INADDR_ANY;
     server.sin_port = htons(PORT);
 
-    // Bind the socket
     if (bind(server_socket, (struct sockaddr*)&server, sizeof(server)) == SOCKET_ERROR) {
         int err_code = WSAGetLastError();
         printf("Bind failed. Error Code: %d\n", err_code);
 
-        // Handle different error codes
         switch (err_code) {
         case WSAEADDRINUSE:
             printf("Error: The address is already in use.\n");
@@ -181,7 +191,6 @@ int main()
         printf("Bind done.\n");
     }
 
-    // Listen
     listen(server_socket, 3);
     client_socket = waitForClient(server_socket, &client);
     if (client_socket == INVALID_SOCKET) {
@@ -191,11 +200,9 @@ int main()
 
     while (true) {
         puts("Waiting for next command...");
-        // Handle file transfer to the folder created in %LOCALAPPDATA%\warp
-        handleFileTransfer(client_socket, folderPath);
+        handle_command(client_socket, folderPath);
     }
 
-    // Close server socket
     closesocket(server_socket);
     WSACleanup();
 
