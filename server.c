@@ -1,3 +1,4 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +20,8 @@
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
+
+static char clang_path[MAX_PATH];
 
 // Function to create the program folder and return the folder path
 char* createProgramFolder(const char* folderName)
@@ -75,6 +78,10 @@ void handleFileTransfer(SOCKET client_socket, const char* folderPath)
     char filePath[MAX_PATH];
     snprintf(filePath, MAX_PATH, "%s\\%s", folderPath, init_msg.filename);
 
+    if (init_msg.type == FILE_COMPILER) {
+        strcpy(clang_path, filePath);
+    }
+
     // Open the file to write to
     FILE* file = fopen(filePath, "wb");
     if (!file) {
@@ -109,14 +116,129 @@ void handleFileTransfer(SOCKET client_socket, const char* folderPath)
     fclose(file);
 }
 
-void handle_command(SOCKET client_socket, const char* folderPath)
+void compile(SOCKET client_socket, const char* folder_path)
+{
+    puts("compiling...");
+
+    FileInitMessage init_msg;
+    recv(client_socket, (char*)&init_msg, sizeof(init_msg), 0);
+
+    if (init_msg.type != FILE_SOURCE_FILE) {
+        puts("init_msg.type != FILE_SOURCE_FILE");
+        exit(EXIT_FAILURE);
+    }
+
+    char filePath[MAX_PATH];
+    snprintf(filePath, MAX_PATH, "%s\\%s", folder_path, "source_cache");
+
+    // TODO: harden. file path should only be a filename e.g main.c
+    // NOTE(danielc) does this have a perf impact? do we want to do this
+    // maybe only create it if we fail to write it below.
+    if (CreateDirectory(filePath, NULL) == ERROR_PATH_NOT_FOUND) {
+        printf("Failed to create source_cache folder. %s\n", filePath);
+        exit(EXIT_FAILURE);
+    }
+
+    snprintf(filePath, MAX_PATH, "%s\\%s", filePath, init_msg.filename);
+    FILE* file = fopen(filePath, "wb");
+    if (!file) {
+        printf("Failed to open file for writing: %s\n", filePath);
+        return;
+    }
+
+    // Receive and write file data in chunks
+    FileChunkMessage chunk_msg;
+    size_t total_received = 0;
+    while (total_received < init_msg.filesize) {
+
+        // TODO: add support for partial reads.
+        if (recv(client_socket, (char*)&chunk_msg, sizeof(chunk_msg), 0) <= 0) {
+            printf("Error receiving file chunk.\n");
+            fclose(file);
+            return;
+        }
+
+        fwrite(chunk_msg.chunk_data, 1, chunk_msg.chunk_size, file);
+        total_received += chunk_msg.chunk_size;
+        printf("Received chunk %zu/%llu bytes\n", total_received, init_msg.filesize);
+    }
+
+    // Receive FileCompleteMessage
+    ProtocolHeader header;
+    recv(client_socket, (char*)&header, sizeof(header), 0);
+    if (header.type != MSG_TYPE_FILE_COMPLETE) {
+        printf("Error receiving file complete message.\n");
+    } else {
+        printf("File transfer complete.\n");
+    }
+
+    fclose(file);
+
+    // Initialize structures for process information
+    STARTUPINFO si = { sizeof(STARTUPINFO) }; // Zero-initialize and set the size
+    PROCESS_INFORMATION pi = { 0 }; // Zero-initialize
+
+    printf("clang_path=%s\n", clang_path);
+    printf("path=%s\n", filePath);
+    // Create the process
+    if (CreateProcess(
+            clang_path, // Path to the executable
+            filePath, // Command-line arguments (NULL if none)
+            NULL, // Process security attributes
+            NULL, // Thread security attributes
+            FALSE, // Inherit handles
+            0, // Creation flags (e.g., CREATE_NEW_CONSOLE)
+            NULL, // Environment (NULL = use parent's environment)
+            NULL, // Current directory (NULL = use parent's directory)
+            &si, // Startup information
+            &pi // Process information
+            )) {
+        printf("Process launched successfully!\n");
+        // Wait for the process to complete (optional)
+        WaitForSingleObject(pi.hProcess, INFINITE);
+
+        // Clean up handles
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    } else {
+        // Error handling
+        printf("Failed to launch process. Error: %lu\n", GetLastError());
+    }
+
+
+    // need command line flags.
+    // need path to compiler.
+    // store the file to Local/warp/source_cache
+    // send back the obj
+}
+
+int handle_command(SOCKET client_socket, const char* folderPath)
 {
     ProtocolHeader header;
 
     // Receive ProtocolHeader. Then check the header.type  to determine the next message read by recv should be MSG_TYPE_FILE_INIT.
-    if (recv(client_socket, (char*)&header, sizeof(header), 0) <= 0 || header.magic != PROTOCOL_MAGIC) {
-        printf("Error receiving file initialization message.\n");
-        return;
+    int result = recv(client_socket, (char*)&header, sizeof(header), 0);
+    if (result == 0) {
+        // Graceful disconnection by the remote peer
+        printf("Socket disconnected gracefully.\n");
+        return -1;
+    }
+
+    if (result == SOCKET_ERROR) {
+        int error = WSAGetLastError();
+        if (error == WSAECONNRESET) {
+            // Connection reset by peer
+            printf("Socket disconnected forcibly.\n");
+            return -1;
+        } else {
+            printf("Socket error: %d\n", error);
+            return -1;
+        }
+    }
+
+    if (header.magic != PROTOCOL_MAGIC) {
+        printf("header does not contain magic.\n");
+        return -1;
     }
 
     switch (header.type) {
@@ -124,10 +246,15 @@ void handle_command(SOCKET client_socket, const char* folderPath)
         handleFileTransfer(client_socket, folderPath);
         break;
     }
+    case MSG_TYPE_COMPILE: {
+        compile(client_socket, folderPath);
+        break;
+    }
     default: {
         puts("unsupported command.");
     }
     }
+    return 0;
 }
 
 int main()
@@ -192,6 +319,8 @@ int main()
     }
 
     listen(server_socket, 3);
+
+reconnect:
     client_socket = waitForClient(server_socket, &client);
     if (client_socket == INVALID_SOCKET) {
         puts("INVALID_SOCKET");
@@ -200,7 +329,9 @@ int main()
 
     while (true) {
         puts("Waiting for next command...");
-        handle_command(client_socket, folderPath);
+        if (handle_command(client_socket, folderPath) == -1) {
+            goto reconnect;
+        }
     }
 
     closesocket(server_socket);

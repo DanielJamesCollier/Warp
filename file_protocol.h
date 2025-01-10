@@ -11,10 +11,16 @@
 
 // Message types
 typedef enum {
-    MSG_TYPE_FILE_INIT, // File transmission initialization
-    MSG_TYPE_FILE_CHUNK, // File chunk
-    MSG_TYPE_FILE_COMPLETE // File transmission completion
+    MSG_TYPE_FILE_INIT,
+    MSG_TYPE_FILE_CHUNK,
+    MSG_TYPE_FILE_COMPLETE,
+    MSG_TYPE_COMPILE,
 } MessageType;
+
+typedef enum {
+    FILE_COMPILER,
+    FILE_SOURCE_FILE,
+} FileType;
 
 // General protocol message header
 #pragma pack(push, 1) // Ensure no padding
@@ -32,6 +38,7 @@ typedef struct
 {
     char filename[MAX_FILENAME_LENGTH]; // Name of the file to be sent
     uint64_t filesize; // Total size of the file
+    uint64_t type; // FileType
 } FileInitMessage;
 #pragma pack(pop)
 
