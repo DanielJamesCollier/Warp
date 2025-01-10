@@ -183,18 +183,16 @@ int main()
 
     // Listen
     listen(server_socket, 3);
+    client_socket = waitForClient(server_socket, &client);
+    if (client_socket == INVALID_SOCKET) {
+        puts("INVALID_SOCKET");
+        return EXIT_FAILURE;
+    }
 
     while (true) {
-        client_socket = waitForClient(server_socket, &client);
-        if (client_socket == INVALID_SOCKET) {
-            break;
-        }
-
+        puts("Waiting for next command...");
         // Handle file transfer to the folder created in %LOCALAPPDATA%\warp
         handleFileTransfer(client_socket, folderPath);
-
-        // Close client socket
-        closesocket(client_socket);
     }
 
     // Close server socket
