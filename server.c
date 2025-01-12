@@ -5,49 +5,18 @@
 #include <string.h>
 
 #include "file_protocol.h"
+#include "utils.h"
 
-#if defined(_WIN32)
-#pragma warning(push)
-#pragma warning(disable : 6101)
-#include <ws2tcpip.h>
-#pragma warning(pop)
-#include <shlobj.h> // For SHGetFolderPath
 #include <windows.h>
-#endif
-
-#pragma comment(lib, "ws2_32.lib")
-#pragma comment(lib, "Shell32.lib")
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
 
+static char warp_dir[MAX_PATH];
+static char servers_dir[MAX_PATH];
+static char sources_dir[MAX_PATH];
+static char artifacts_dir[MAX_PATH];
 static char clang_path[MAX_PATH];
-
-// Function to create the program folder and return the folder path
-char* createProgramFolder(const char* folderName)
-{
-    static char programFolderPath[MAX_PATH]; // Static to retain value after
-                                             // function returns
-    char localAppDataPath[MAX_PATH];
-
-    // Get the path to %LOCALAPPDATA%
-    if (SUCCEEDED(SHGetFolderPath(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, localAppDataPath))) {
-        // Create a path for the program's folder
-        snprintf(programFolderPath, MAX_PATH, "%s\\%s", localAppDataPath, folderName);
-
-        // Create the directory if it doesn't exist
-        if (CreateDirectory(programFolderPath, NULL) || GetLastError() == ERROR_ALREADY_EXISTS) {
-            printf("Program folder created or already exists: %s\n", programFolderPath);
-            return programFolderPath; // Return the path of the created folder
-        } else {
-            printf("Failed to create program folder. Error: %lu\n", GetLastError());
-            return NULL; // Failure, folder not created
-        }
-    } else {
-        printf("Failed to get LocalAppData path.\n");
-        return NULL; // Failure to get path
-    }
-}
 
 // Function to wait for a client connection
 SOCKET
@@ -65,7 +34,7 @@ waitForClient(SOCKET server_socket, struct sockaddr_in* client)
 }
 
 // Function to handle file transfer from client
-void handleFileTransfer(SOCKET client_socket, const char* folderPath)
+void handleFileTransfer(SOCKET client_socket)
 {
     ProtocolHeader header;
     FileInitMessage init_msg;
@@ -76,7 +45,7 @@ void handleFileTransfer(SOCKET client_socket, const char* folderPath)
 
     // Create the full file path in the designated folder
     char filePath[MAX_PATH];
-    snprintf(filePath, MAX_PATH, "%s\\%s", folderPath, init_msg.filename);
+    snprintf(filePath, MAX_PATH, "%s\\%s", servers_dir, init_msg.filename);
 
     if (init_msg.type == FILE_COMPILER) {
         strcpy(clang_path, filePath);
@@ -116,7 +85,7 @@ void handleFileTransfer(SOCKET client_socket, const char* folderPath)
     fclose(file);
 }
 
-void compile(SOCKET client_socket, const char* folder_path)
+void compile(SOCKET client_socket)
 {
     puts("compiling...");
 
@@ -129,17 +98,7 @@ void compile(SOCKET client_socket, const char* folder_path)
     }
 
     char filePath[MAX_PATH];
-    snprintf(filePath, MAX_PATH, "%s\\%s", folder_path, "source_cache");
-
-    // TODO: harden. file path should only be a filename e.g main.c
-    // NOTE(danielc) does this have a perf impact? do we want to do this
-    // maybe only create it if we fail to write it below.
-    if (CreateDirectory(filePath, NULL) == ERROR_PATH_NOT_FOUND) {
-        printf("Failed to create source_cache folder. %s\n", filePath);
-        exit(EXIT_FAILURE);
-    }
-
-    snprintf(filePath, MAX_PATH, "%s\\%s", filePath, init_msg.filename);
+    snprintf(filePath, MAX_PATH, "%s\\%s", sources_dir, init_msg.filename);
     FILE* file = fopen(filePath, "wb");
     if (!file) {
         printf("Failed to open file for writing: %s\n", filePath);
@@ -177,13 +136,23 @@ void compile(SOCKET client_socket, const char* folder_path)
     // Initialize structures for process information
     STARTUPINFO si = { sizeof(STARTUPINFO) }; // Zero-initialize and set the size
     PROCESS_INFORMATION pi = { 0 }; // Zero-initialize
-
+                                    //
     printf("clang_path=%s\n", clang_path);
     printf("path=%s\n", filePath);
-    // Create the process
+
+    char fixed_path[MAX_PATH];
+    convertToDoubleBackslashes(filePath, fixed_path, MAX_PATH);
+
+    // TODO arena alloc this.
+    char command[512];
+    snprintf(command, 512, "%s %s", clang_path, fixed_path);
+
+    printf("new_path=%s\n", fixed_path);
+
+    // Compile.
     if (CreateProcess(
-            clang_path, // Path to the executable
-            filePath, // Command-line arguments (NULL if none)
+            NULL,
+            command,
             NULL, // Process security attributes
             NULL, // Thread security attributes
             FALSE, // Inherit handles
@@ -205,14 +174,13 @@ void compile(SOCKET client_socket, const char* folder_path)
         printf("Failed to launch process. Error: %lu\n", GetLastError());
     }
 
-
     // need command line flags.
     // need path to compiler.
     // store the file to Local/warp/source_cache
     // send back the obj
 }
 
-int handle_command(SOCKET client_socket, const char* folderPath)
+int handle_command(SOCKET client_socket)
 {
     ProtocolHeader header;
 
@@ -243,11 +211,11 @@ int handle_command(SOCKET client_socket, const char* folderPath)
 
     switch (header.type) {
     case MSG_TYPE_FILE_INIT: {
-        handleFileTransfer(client_socket, folderPath);
+        handleFileTransfer(client_socket);
         break;
     }
     case MSG_TYPE_COMPILE: {
-        compile(client_socket, folderPath);
+        compile(client_socket);
         break;
     }
     default: {
@@ -259,17 +227,39 @@ int handle_command(SOCKET client_socket, const char* folderPath)
 
 int main()
 {
+    // Local\\warp
+    bool ok = create_app_data_folder(warp_dir, "Warp", NULL);
+    if (!ok) {
+        printf("Failed to create the warp folder.");
+        return 1;
+    }
+
+    // Local\\server
+    ok = create_app_data_folder(servers_dir, "Warp", "server", NULL);
+    if (!ok) {
+        printf("Failed to create the warp server folder.");
+        return 1;
+    }
+
+    // Local\\server\\sources
+    ok = create_app_data_folder(sources_dir, "Warp", "server", "sources", NULL);
+    if (!ok) {
+        printf("Failed to create the warp server folder.");
+        return 1;
+    }
+
+    // Local\\server\\artifacts
+    ok = create_app_data_folder(artifacts_dir, "Warp", "server", "artifacts", NULL);
+    if (!ok) {
+        printf("Failed to create the warp server folder.");
+        return 1;
+    }
+
+    printf("Initializing Winsock...\n");
     WSADATA wsa;
     SOCKET server_socket, client_socket;
     struct sockaddr_in server, client;
 
-    // Create the program folder under LocalAppData and get the folder path
-    char* folderPath = createProgramFolder("warp");
-    if (!folderPath) {
-        return 1; // Exit if folder creation failed
-    }
-
-    printf("Initializing Winsock...\n");
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
         printf("Failed. Error Code: %d\n", WSAGetLastError());
         return 1;
@@ -329,7 +319,7 @@ reconnect:
 
     while (true) {
         puts("Waiting for next command...");
-        if (handle_command(client_socket, folderPath) == -1) {
+        if (handle_command(client_socket) == -1) {
             goto reconnect;
         }
     }
