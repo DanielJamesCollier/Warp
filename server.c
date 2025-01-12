@@ -85,6 +85,34 @@ void handleFileTransfer(SOCKET client_socket)
     fclose(file);
 }
 
+void get_filename_without_extension(const char* input, char* output, size_t output_size)
+{
+    if (input == NULL || output == NULL) {
+        return;
+    }
+
+    // Find the last path separator
+    const char* last_separator = strrchr(input, '/');
+    if (!last_separator) {
+        last_separator = strrchr(input, '\\'); // Check for Windows-style separators
+    }
+
+    const char* filename = last_separator ? last_separator + 1 : input; // Start after the separator
+
+    // Find the last dot in the filename
+    const char* last_dot = strrchr(filename, '.');
+    size_t length = last_dot ? (size_t)(last_dot - filename) : strlen(filename);
+
+    // Copy the result into the output buffer, ensuring no overflow
+    if (length < output_size) {
+        strncpy(output, filename, length);
+        output[length] = '\0'; // Null-terminate
+    } else {
+        strncpy(output, filename, output_size - 1);
+        output[output_size - 1] = '\0';
+    }
+}
+
 void compile(SOCKET client_socket)
 {
     puts("compiling...");
@@ -145,7 +173,11 @@ void compile(SOCKET client_socket)
 
     // TODO arena alloc this.
     char command[512];
-    snprintf(command, 512, "%s %s", clang_path, fixed_path);
+    // -c because we only want object files.
+    // /Fo to specify the output location.
+    char file_name_no_extension[MAX_PATH];
+    get_filename_without_extension(init_msg.filename, file_name_no_extension, MAX_PATH);
+    snprintf(command, 512, "%s -c %s /Fo%s\\%s.obj", clang_path, fixed_path, artifacts_dir, file_name_no_extension);
 
     printf("new_path=%s\n", fixed_path);
 

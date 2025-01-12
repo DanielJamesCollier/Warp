@@ -1,6 +1,4 @@
 + sync environment strings
-+ create build_artifacts folder which should contain *.obj files and everything else.
-+ launch the compiler in the client to run the preprocessor. then take that output and send it to the remote and compile it. If the file
-   fails to compile relaunch it on the client.
++ write .exe and .obj files to warp/servers/artifacts. maybe we need a folder per build / per compile command.
++ If the remote compile fails. retry on the client. 
 + handle clang-cl.exe main.c two.c
-+ create warp/server and warp/client folders.
