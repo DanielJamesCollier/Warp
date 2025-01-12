@@ -12,7 +12,6 @@ call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build
 :: /Zc:inline            - Enforces standard inline behavior, affecting how inline functions are handled.
 :: /fp:precise           - Ensures strict floating-point model for consistent results across platforms.
 :: /errorReport:prompt   - Prompts to send error reports when internal compiler errors occur.
-:: /WX-                  - Treats warnings as warnings, not errors (warnings won’t stop the build).
 :: /Zc:forScope          - Enforces standard scoping rules for `for` loop variables.
 :: /RTC1                 - Enables runtime checks for uninitialized variables and other errors.
 :: /Gd                   - Sets __cdecl as the default calling convention for functions.
@@ -26,6 +25,6 @@ call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build
 :: /guard:cf             - Enables control flow guard to mitigate certain types of attacks.
 :: /analyze              - Runs code analysis to detect potential issues during compilation.
 :: /Qspectre             - Mitigates certain Spectre variant 1 security vulnerabilities.
-set DEBUG_FLAGS=/permissive- /GS /W3 /Zc:wchar_t /Zi /Gm- /Od /sdl /Zc:inline /fp:precise /errorReport:prompt /WX- /Zc:forScope /RTC1 /Gd /MTd /FC /EHsc /nologo /diagnostics:column /std:c17 /guard:cf /analyze /Qspectre
+set DEBUG_FLAGS=/permissive- /GS /W3 /Zc:wchar_t /Zi /Gm- /Od /sdl /Zc:inline /fp:precise /errorReport:prompt /WX- /Zc:forScope /RTC1 /Gd /MTd /FC /EHsc /nologo /diagnostics:column /std:c17 /guard:cf /analyze /Qspectre /fsanitize=address
 
 set LINKER_FLAGS= /DEBUG:FULL /INCREMENTAL:NO
