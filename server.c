@@ -173,6 +173,8 @@ void compile(SOCKET client_socket)
         // Clean up handles
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
+
+        // TODO: send obj file to the client.
     } else {
         // Error handling
         printf("Failed to launch process. Error: %lu\n", GetLastError());

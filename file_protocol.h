@@ -20,6 +20,7 @@ typedef enum {
 typedef enum {
     FILE_COMPILER,
     FILE_SOURCE_FILE,
+    FILE_OBJ_FILE,
 } FileType;
 
 // General protocol message header
