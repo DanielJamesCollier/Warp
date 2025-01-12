@@ -18,6 +18,23 @@
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "Shell32.lib")
 
+const char* getFileName(const char* fullPath)
+{
+    if (fullPath == NULL) {
+        return NULL;
+    }
+
+    // Find the last occurrence of '/' or '\' in the path
+    const char* lastSlash = strrchr(fullPath, '/');
+    const char* lastBackslash = strrchr(fullPath, '\\');
+
+    // Use the separator that appears last in the string
+    const char* lastSeparator = (lastSlash > lastBackslash) ? lastSlash : lastBackslash;
+
+    // If no separator is found, the full path is already a file name
+    return lastSeparator ? lastSeparator + 1 : fullPath;
+}
+
 void convertToDoubleBackslashes(const char* input, char* output, size_t outputSize)
 {
     size_t inputLength = strlen(input);
