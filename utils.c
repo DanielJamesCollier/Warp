@@ -18,7 +18,8 @@
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "Shell32.lib")
 
-void get_filename_without_extension(const char* input, char* output, size_t output_size) {
+void
+get_filename_without_extension(const char* input, char* output, size_t output_size) {
   if (input == NULL || output == NULL) {
     return;
   }
@@ -45,7 +46,8 @@ void get_filename_without_extension(const char* input, char* output, size_t outp
   }
 }
 
-const char* getFileName(const char* fullPath) {
+const char*
+getFileName(const char* fullPath) {
   if (fullPath == NULL) {
     return NULL;
   }
@@ -61,7 +63,8 @@ const char* getFileName(const char* fullPath) {
   return lastSeparator ? lastSeparator + 1 : fullPath;
 }
 
-void convertToDoubleBackslashes(const char* input, char* output, size_t outputSize) {
+void
+convertToDoubleBackslashes(const char* input, char* output, size_t outputSize) {
   size_t inputLength = strlen(input);
   size_t j = 0;
 
@@ -88,7 +91,8 @@ void convertToDoubleBackslashes(const char* input, char* output, size_t outputSi
   output[j] = '\0';  // Null-terminate the string
 }
 
-bool create_app_data_folder(char* out, const char* firstFolder, ...) {
+bool
+create_app_data_folder(char* out, const char* firstFolder, ...) {
   // Get the path to %LOCALAPPDATA%
   if (FAILED(SHGetFolderPath(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, out))) {
     printf("Failed to get AppData folder path.\n");

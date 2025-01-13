@@ -33,7 +33,8 @@ waitForClient(SOCKET server_socket, struct sockaddr_in* client) {
 }
 
 // Function to handle file transfer from client
-void handleFileTransfer(SOCKET client_socket) {
+void
+handleFileTransfer(SOCKET client_socket) {
   ProtocolHeader header;
   FileInitMessage init_msg;
   FileChunkMessage chunk_msg;
@@ -82,7 +83,8 @@ void handleFileTransfer(SOCKET client_socket) {
   fclose(file);
 }
 
-void compile(SOCKET client_socket) {
+void
+compile(SOCKET client_socket) {
   puts("compiling...");
 
   FileInitMessage init_msg;
@@ -190,7 +192,8 @@ void compile(SOCKET client_socket) {
   // send back the obj
 }
 
-int handle_command(SOCKET client_socket) {
+int
+handle_command(SOCKET client_socket) {
   ProtocolHeader header;
 
   // Receive ProtocolHeader. Then check the header.type  to determine the next message read by recv should be
@@ -235,7 +238,8 @@ int handle_command(SOCKET client_socket) {
   return 0;
 }
 
-int main() {
+int
+main() {
   // Local\\warp
   bool ok = create_app_data_folder(warp_dir, "Warp", NULL);
   if (!ok) {

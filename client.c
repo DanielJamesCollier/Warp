@@ -24,7 +24,8 @@ static char sources_dir[MAX_PATH];
 static char artifacts_dir[MAX_PATH];
 static char clang_path[MAX_PATH];
 
-void sync_compiler(SOCKET client_socket, const char* file_path) {
+void
+sync_compiler(SOCKET client_socket, const char* file_path) {
   strcpy(clang_path, file_path);
 
   // Extract the filename from the full path
@@ -75,7 +76,8 @@ void sync_compiler(SOCKET client_socket, const char* file_path) {
   printf("File transfer complete.\n");
 }
 
-void send_compile_command(SOCKET client_socket, const char* file_path) {
+void
+send_compile_command(SOCKET client_socket, const char* file_path) {
   FILE* file = fopen(file_path, "rb");
   if (!file) {
     printf("Failed to open file: %s\n", file_path);
@@ -114,7 +116,8 @@ void send_compile_command(SOCKET client_socket, const char* file_path) {
   printf("File transfer complete.\n");
 }
 
-const char* preprocess(const char* path) {
+const char*
+preprocess(const char* path) {
   static char preprocessed_file[MAX_PATH];
   static char outputBuffer[4096];  // Buffer to hold stdout content
 
@@ -197,7 +200,8 @@ const char* preprocess(const char* path) {
   }
 }
 
-int main() {
+int
+main() {
   // Local\\warp
   bool ok = create_app_data_folder(warp_dir, "Warp", NULL);
   if (!ok) {
