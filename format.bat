@@ -15,7 +15,7 @@ if errorlevel 1 (
 echo Formatting all .h and .c files using Chromium style...
 for /r %%f in (*.h *.c) do (
     echo Formatting: %%f
-    %CLANG_FORMAT% -i --style=WEBKIT "%%f"
+    %CLANG_FORMAT% -i --style="{BasedOnStyle: Chromium, ColumnLimit: 120}" "%%f"
 )
 
 echo Done!
