@@ -227,7 +227,7 @@ compile(SOCKET client_socket) {
       exit(EXIT_FAILURE);
     }
     send_obj(client_socket, obj_file, getFileName(obj_file_path));
-
+    fclose(obj_file);
   } else {
     // Error handling
     printf("Failed to launch process. Error: %lu\n", GetLastError());
