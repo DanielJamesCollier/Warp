@@ -77,6 +77,52 @@ sync_compiler(SOCKET client_socket, const char* file_path) {
 }
 
 void
+read_obj(SOCKET client_socket) {
+  ProtocolHeader header;
+  FileInitMessage init_msg;
+  FileChunkMessage chunk_msg;
+
+  recv(client_socket, (char*)&init_msg, sizeof(init_msg), 0);
+  printf("Receiving file: %s, Size: %llu bytes\n", init_msg.filename, init_msg.filesize);
+
+  // Create the full file path in the designated folder
+  char filePath[MAX_PATH];
+  snprintf(filePath, MAX_PATH, "%s\\%s", artifacts_dir, init_msg.filename);
+
+  // Open the file to write to
+  FILE* file = fopen(filePath, "wb");
+  if (!file) {
+    printf("Failed to open file for writing: %s\n", filePath);
+    return;
+  }
+
+  // Receive and write file data in chunks
+  size_t total_received = 0;
+  while (total_received < init_msg.filesize) {
+    // TODO: add support for partial reads.
+    if (recv(client_socket, (char*)&chunk_msg, sizeof(chunk_msg), 0) <= 0) {
+      printf("Error receiving file chunk.\n");
+      fclose(file);
+      return;
+    }
+
+    fwrite(chunk_msg.chunk_data, 1, chunk_msg.chunk_size, file);
+    total_received += chunk_msg.chunk_size;
+    printf("Received chunk %zu/%llu bytes\n", total_received, init_msg.filesize);
+  }
+
+  // Receive FileCompleteMessage
+  recv(client_socket, (char*)&header, sizeof(header), 0);
+  if (header.type != MSG_TYPE_FILE_COMPLETE) {
+    printf("Error receiving file complete message.\n");
+  } else {
+    printf("File transfer complete.\n");
+  }
+
+  fclose(file);
+}
+
+void
 send_compile_command(SOCKET client_socket, const char* file_path) {
   FILE* file = fopen(file_path, "rb");
   if (!file) {
@@ -114,6 +160,8 @@ send_compile_command(SOCKET client_socket, const char* file_path) {
   send(client_socket, (char*)&header, sizeof(header), 0);
   fclose(file);
   printf("File transfer complete.\n");
+
+  read_obj(client_socket);
 }
 
 const char*
@@ -209,15 +257,22 @@ main() {
     return 1;
   }
 
-  // Local\\server
+  // Local\\client
   ok = create_app_data_folder(servers_dir, "Warp", "client", NULL);
   if (!ok) {
     printf("Failed to create the warp server folder.");
     return 1;
   }
 
-  // Local\\server\\sources
+  // Local\\client\\preprocess
   ok = create_app_data_folder(sources_dir, "Warp", "client", "preprocess", NULL);
+  if (!ok) {
+    printf("Failed to create the warp server folder.");
+    return 1;
+  }
+
+  // Local\\client\\artifacts
+  ok = create_app_data_folder(artifacts_dir, "Warp", "client", "artifacts", NULL);
   if (!ok) {
     printf("Failed to create the warp server folder.");
     return 1;

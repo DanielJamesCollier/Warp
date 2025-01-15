@@ -32,6 +32,45 @@ waitForClient(SOCKET server_socket, struct sockaddr_in* client) {
   return client_socket;
 }
 
+void
+send_obj(SOCKET client_socket, FILE* file, const char* obj_filepath) {
+  printf("----\n");
+  printf("%s\n", obj_filepath);
+  printf("----\n");
+  ProtocolHeader header;
+  FileInitMessage payload;
+  payload.type = FILE_OBJ_FILE;
+
+  fseek(file, 0, SEEK_END);
+  payload.filesize = ftell(file);
+  rewind(file);
+
+  // Only copy the filename, not the full path
+  strcpy(payload.filename, getFileName(obj_filepath));
+
+  printf("----\n");
+  printf("%s\n", payload.filename);
+  printf("----\n");
+
+  send(client_socket, (char*)&payload, sizeof(payload), 0);
+
+  // Send file data in chunks
+  FileChunkMessage chunk_msg;
+  size_t bytes_read;
+  while ((bytes_read = fread(chunk_msg.chunk_data, 1, sizeof(chunk_msg.chunk_data), file)) > 0) {
+    chunk_msg.chunk_size = (uint32_t)bytes_read;
+    send(client_socket, (char*)&chunk_msg, sizeof(chunk_msg), 0);
+  }
+
+  // Send FileCompleteMessage
+  header.type = MSG_TYPE_FILE_COMPLETE;
+  header.length = 0;  // No additional data for FileCompleteMessage
+  printf("sending %zi\n", sizeof(header));
+  send(client_socket, (char*)&header, sizeof(header), 0);
+  fclose(file);
+  printf("File transfer complete.\n");
+}
+
 // Function to handle file transfer from client
 void
 handleFileTransfer(SOCKET client_socket) {
@@ -128,8 +167,6 @@ compile(SOCKET client_socket) {
     printf("File transfer complete.\n");
   }
 
-  fclose(file);
-
   // Initialize structures for process information
   STARTUPINFO si = {sizeof(STARTUPINFO)};  // Zero-initialize and set the size
   PROCESS_INFORMATION pi = {0};            // Zero-initialize
@@ -180,7 +217,17 @@ compile(SOCKET client_socket) {
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 
-    // TODO: send obj file to the client.
+    char obj_file_path[MAX_PATH];
+    snprintf(obj_file_path, MAX_PATH, "%s\\%s.obj", artifacts_dir, file_name_no_extension);
+
+    FILE* obj_file = fopen(obj_file_path, "rb");
+    if (!obj_file) {
+      // This is bad. improve error handling here.
+      printf("obj file not found!");
+      exit(EXIT_FAILURE);
+    }
+    send_obj(client_socket, obj_file, getFileName(obj_file_path));
+
   } else {
     // Error handling
     printf("Failed to launch process. Error: %lu\n", GetLastError());
@@ -190,6 +237,7 @@ compile(SOCKET client_socket) {
   // need path to compiler.
   // store the file to Local/warp/source_cache
   // send back the obj
+  fclose(file);
 }
 
 int

@@ -25,6 +25,6 @@ call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build
 :: /guard:cf             - Enables control flow guard to mitigate certain types of attacks.
 :: /analyze              - Runs code analysis to detect potential issues during compilation.
 :: /Qspectre             - Mitigates certain Spectre variant 1 security vulnerabilities.
-set DEBUG_FLAGS=/permissive- /GS /W3 /Zc:wchar_t /Zi /Gm- /Od /sdl /Zc:inline /fp:precise /errorReport:prompt /WX- /Zc:forScope /RTC1 /Gd /MTd /FC /EHsc /nologo /diagnostics:column /std:c17 /guard:cf /analyze /Qspectre /fsanitize=address
+set DEBUG_FLAGS=/permissive- /GS /W3 /Zc:wchar_t /Zi /Gm- /Od /sdl /Zc:inline /fp:precise /errorReport:prompt /WX- /Zc:forScope /RTC1 /Gd /MTd /FC /EHsc /nologo /diagnostics:column /std:c17 /guard:cf /analyze /Qspectre 
 
 set LINKER_FLAGS= /DEBUG:FULL /INCREMENTAL:NO
