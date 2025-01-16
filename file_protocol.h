@@ -1,15 +1,12 @@
 #ifndef FILE_TRANSFER_PROTOCOL_H
 #define FILE_TRANSFER_PROTOCOL_H
 
-#include <stdint.h>
+#include "base/core.h"
 
-#define PROTOCOL_MAGIC 0xAABBCCDD  // Unique identifier for protocol messages
-
-// Maximum sizes
-#define MAX_FILENAME_LENGTH 256
+#define PROTOCOL_MAGIC 0xAABBCCDD
+#define MAX_FILENAME_LENGTH 260
 #define MAX_CHUNK_SIZE 4096
 
-// Message types
 typedef enum {
   MSG_TYPE_FILE_INIT,
   MSG_TYPE_FILE_CHUNK,
@@ -23,29 +20,26 @@ typedef enum {
   FILE_OBJ_FILE,
 } FileType;
 
-// General protocol message header
-#pragma pack(push, 1)  // Ensure no padding
+#pragma pack(push, 1)
 typedef struct {
-  uint32_t magic;   // Protocol magic number
-  uint32_t type;    // Message type (MessageType)
-  uint64_t length;  // Length of the payload (excluding header)
+  u32 magic;
+  u32 type;
+  u64 length;
 } ProtocolHeader;
 #pragma pack(pop)
 
-// File initialization message
 #pragma pack(push, 1)
 typedef struct {
-  char filename[MAX_FILENAME_LENGTH];  // Name of the file to be sent
-  uint64_t filesize;                   // Total size of the file
-  uint64_t type;                       // FileType
+  char filename[MAX_FILENAME_LENGTH];
+  u64 filesize;
+  u64 type;
 } FileInitMessage;
 #pragma pack(pop)
 
-// File chunk message
 #pragma pack(push, 1)
 typedef struct {
-  uint32_t chunk_size;                 // Size of the chunk being sent
-  uint8_t chunk_data[MAX_CHUNK_SIZE];  // File chunk data
+  u32 chunk_size;
+  u8 chunk_data[MAX_CHUNK_SIZE];
 } FileChunkMessage;
 #pragma pack(pop)
 

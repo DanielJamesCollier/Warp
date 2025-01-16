@@ -1,5 +1,4 @@
 #define _CRT_SECURE_NO_WARNINGS
-#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -11,6 +10,7 @@
 #include <windows.h>
 #endif
 
+#include "base/core.h"
 #include "file_protocol.h"
 #include "utils.h"
 
@@ -24,19 +24,19 @@ static char sources_dir[MAX_PATH];
 static char artifacts_dir[MAX_PATH];
 static char clang_path[MAX_PATH];
 
-void
-sync_compiler(SOCKET client_socket, const char* file_path) {
+internal void
+sync_compiler(SOCKET client_socket, const char *file_path) {
   strcpy(clang_path, file_path);
 
   // Extract the filename from the full path
-  const char* filename = strrchr(file_path, '\\');  // For Windows paths
+  const char *filename = strrchr(file_path, '\\');  // For Windows paths
   if (!filename) {
     filename = strrchr(file_path, '/');  // For Unix-like paths
   }
   filename = (filename) ? filename + 1 : file_path;  // Move past the slash or use the
                                                      // full path if no slash found
 
-  FILE* file = fopen(file_path, "rb");
+  FILE *file = fopen(file_path, "rb");
   if (!file) {
     printf("Failed to open file: %s\n", file_path);
     return;
@@ -56,33 +56,33 @@ sync_compiler(SOCKET client_socket, const char* file_path) {
 
   ProtocolHeader header = {PROTOCOL_MAGIC, MSG_TYPE_FILE_INIT, sizeof(payload)};
 
-  send(client_socket, (char*)&header, sizeof(header), 0);
-  send(client_socket, (char*)&payload, sizeof(payload), 0);
+  send(client_socket, (char *)&header, sizeof(header), 0);
+  send(client_socket, (char *)&payload, sizeof(payload), 0);
 
   // Send file data in chunks
   FileChunkMessage chunk_msg;
   size_t bytes_read;
   while ((bytes_read = fread(chunk_msg.chunk_data, 1, sizeof(chunk_msg.chunk_data), file)) > 0) {
-    chunk_msg.chunk_size = (uint32_t)bytes_read;
-    send(client_socket, (char*)&chunk_msg, sizeof(chunk_msg), 0);
+    chunk_msg.chunk_size = (u32)bytes_read;
+    send(client_socket, (char *)&chunk_msg, sizeof(chunk_msg), 0);
   }
 
   // Send FileCompleteMessage
   header.type = MSG_TYPE_FILE_COMPLETE;
   header.length = 0;  // No additional data for FileCompleteMessage
   printf("sending %zi\n", sizeof(header));
-  send(client_socket, (char*)&header, sizeof(header), 0);
+  send(client_socket, (char *)&header, sizeof(header), 0);
   fclose(file);
   printf("File transfer complete.\n");
 }
 
-void
+internal void
 read_obj(SOCKET client_socket) {
   ProtocolHeader header;
   FileInitMessage init_msg;
   FileChunkMessage chunk_msg;
 
-  recv(client_socket, (char*)&init_msg, sizeof(init_msg), 0);
+  recv(client_socket, (char *)&init_msg, sizeof(init_msg), 0);
   printf("Receiving file: %s, Size: %llu bytes\n", init_msg.filename, init_msg.filesize);
 
   // Create the full file path in the designated folder
@@ -90,7 +90,7 @@ read_obj(SOCKET client_socket) {
   snprintf(filePath, MAX_PATH, "%s\\%s", artifacts_dir, init_msg.filename);
 
   // Open the file to write to
-  FILE* file = fopen(filePath, "wb");
+  FILE *file = fopen(filePath, "wb");
   if (!file) {
     printf("Failed to open file for writing: %s\n", filePath);
     return;
@@ -100,7 +100,7 @@ read_obj(SOCKET client_socket) {
   size_t total_received = 0;
   while (total_received < init_msg.filesize) {
     // TODO: add support for partial reads.
-    if (recv(client_socket, (char*)&chunk_msg, sizeof(chunk_msg), 0) <= 0) {
+    if (recv(client_socket, (char *)&chunk_msg, sizeof(chunk_msg), 0) <= 0) {
       printf("Error receiving file chunk.\n");
       fclose(file);
       return;
@@ -112,7 +112,7 @@ read_obj(SOCKET client_socket) {
   }
 
   // Receive FileCompleteMessage
-  recv(client_socket, (char*)&header, sizeof(header), 0);
+  recv(client_socket, (char *)&header, sizeof(header), 0);
   if (header.type != MSG_TYPE_FILE_COMPLETE) {
     printf("Error receiving file complete message.\n");
   } else {
@@ -122,9 +122,9 @@ read_obj(SOCKET client_socket) {
   fclose(file);
 }
 
-void
-send_compile_command(SOCKET client_socket, const char* file_path) {
-  FILE* file = fopen(file_path, "rb");
+internal void
+send_compile_command(SOCKET client_socket, const char *file_path) {
+  FILE *file = fopen(file_path, "rb");
   if (!file) {
     printf("Failed to open file: %s\n", file_path);
     return;
@@ -137,35 +137,35 @@ send_compile_command(SOCKET client_socket, const char* file_path) {
   payload.filesize = ftell(file);
   rewind(file);
 
-  const char* simple_name = getFileName(file_path);
+  const char *simple_name = getFileName(file_path);
   strcpy(payload.filename, simple_name);
 
   ProtocolHeader header = {PROTOCOL_MAGIC, MSG_TYPE_COMPILE, sizeof(payload)};
 
-  send(client_socket, (char*)&header, sizeof(header), 0);
-  send(client_socket, (char*)&payload, sizeof(payload), 0);
+  send(client_socket, (char *)&header, sizeof(header), 0);
+  send(client_socket, (char *)&payload, sizeof(payload), 0);
 
   // Send file data in chunks
   FileChunkMessage chunk_msg;
   size_t bytes_read;
   while ((bytes_read = fread(chunk_msg.chunk_data, 1, sizeof(chunk_msg.chunk_data), file)) > 0) {
     chunk_msg.chunk_size = (uint32_t)bytes_read;
-    send(client_socket, (char*)&chunk_msg, sizeof(chunk_msg), 0);
+    send(client_socket, (char *)&chunk_msg, sizeof(chunk_msg), 0);
   }
 
   // Send FileCompleteMessage
   header.type = MSG_TYPE_FILE_COMPLETE;
   header.length = 0;  // No additional data for FileCompleteMessage
   printf("sending %zi\n", sizeof(header));
-  send(client_socket, (char*)&header, sizeof(header), 0);
+  send(client_socket, (char *)&header, sizeof(header), 0);
   fclose(file);
   printf("File transfer complete.\n");
 
   read_obj(client_socket);
 }
 
-const char*
-preprocess(const char* path) {
+internal const char *
+preprocess(const char *path) {
   static char preprocessed_file[MAX_PATH];
   static char outputBuffer[4096];  // Buffer to hold stdout content
 
@@ -217,7 +217,7 @@ preprocess(const char* path) {
 
     // Read the output from the child process
     DWORD bytesRead;
-    FILE* tempFile = fopen(preprocessed_file, "w");
+    FILE *tempFile = fopen(preprocessed_file, "w");
     if (!tempFile) {
       printf("Error opening temp file for writing\n");
       return NULL;
@@ -251,7 +251,7 @@ preprocess(const char* path) {
 int
 main() {
   // Local\\warp
-  bool ok = create_app_data_folder(warp_dir, "Warp", NULL);
+  b8 ok = create_app_data_folder(warp_dir, "Warp", NULL);
   if (!ok) {
     printf("Failed to create the warp folder.");
     return 1;
@@ -304,7 +304,7 @@ main() {
   server.sin_port = htons(PORT);
 
   // Connect to server
-  if (connect(client_socket, (struct sockaddr*)&server, sizeof(server)) < 0) {
+  if (connect(client_socket, (struct sockaddr *)&server, sizeof(server)) < 0) {
     printf("Connect failed. Error Code: %d\n", WSAGetLastError());
     return 1;
   }
@@ -325,12 +325,12 @@ main() {
     // TODO: harden.
     // TODO sync win32 GetEnvironmentStrings() then pass that to the remote compiler.
     if (strncmp(command, "sync_compiler", 13) == 0) {
-      const char* file_path = command + 14;
+      const char *file_path = command + 14;
       sync_compiler(client_socket, file_path);
     } else if (strncmp(command, "compile", 7) == 0) {
       printf("compiling.\n");
-      const char* file_path = command + 8;
-      const char* output = preprocess(file_path);
+      const char *file_path = command + 8;
+      const char *output = preprocess(file_path);
 
       // todo harden. getfilename can return null.
       send_compile_command(client_socket, output);

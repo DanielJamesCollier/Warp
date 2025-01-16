@@ -1,9 +1,9 @@
 #define _CRT_SECURE_NO_WARNINGS
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "base/core.h"
 #include "file_protocol.h"
 #include "utils.h"
 
@@ -19,11 +19,11 @@ static char artifacts_dir[MAX_PATH];
 static char clang_path[MAX_PATH];
 
 // Function to wait for a client connection
-SOCKET
-waitForClient(SOCKET server_socket, struct sockaddr_in* client) {
-  int client_len = sizeof(struct sockaddr_in);
+internal SOCKET
+waitForClient(SOCKET server_socket, struct sockaddr_in *client) {
+  s32 client_len = sizeof(struct sockaddr_in);
   printf("Waiting for incoming connections...\n");
-  SOCKET client_socket = accept(server_socket, (struct sockaddr*)client, &client_len);
+  SOCKET client_socket = accept(server_socket, (struct sockaddr *)client, &client_len);
   if (client_socket == INVALID_SOCKET) {
     printf("Accept failed. Error Code: %d\n", WSAGetLastError());
   } else {
@@ -32,8 +32,8 @@ waitForClient(SOCKET server_socket, struct sockaddr_in* client) {
   return client_socket;
 }
 
-void
-send_obj(SOCKET client_socket, FILE* file, const char* obj_filepath) {
+internal void
+send_obj(SOCKET client_socket, FILE *file, const char *obj_filepath) {
   printf("----\n");
   printf("%s\n", obj_filepath);
   printf("----\n");
@@ -52,33 +52,33 @@ send_obj(SOCKET client_socket, FILE* file, const char* obj_filepath) {
   printf("%s\n", payload.filename);
   printf("----\n");
 
-  send(client_socket, (char*)&payload, sizeof(payload), 0);
+  send(client_socket, (char *)&payload, sizeof(payload), 0);
 
   // Send file data in chunks
   FileChunkMessage chunk_msg;
   size_t bytes_read;
   while ((bytes_read = fread(chunk_msg.chunk_data, 1, sizeof(chunk_msg.chunk_data), file)) > 0) {
     chunk_msg.chunk_size = (uint32_t)bytes_read;
-    send(client_socket, (char*)&chunk_msg, sizeof(chunk_msg), 0);
+    send(client_socket, (char *)&chunk_msg, sizeof(chunk_msg), 0);
   }
 
   // Send FileCompleteMessage
   header.type = MSG_TYPE_FILE_COMPLETE;
   header.length = 0;  // No additional data for FileCompleteMessage
   printf("sending %zi\n", sizeof(header));
-  send(client_socket, (char*)&header, sizeof(header), 0);
+  send(client_socket, (char *)&header, sizeof(header), 0);
   fclose(file);
   printf("File transfer complete.\n");
 }
 
 // Function to handle file transfer from client
-void
+internal void
 handleFileTransfer(SOCKET client_socket) {
   ProtocolHeader header;
   FileInitMessage init_msg;
   FileChunkMessage chunk_msg;
 
-  recv(client_socket, (char*)&init_msg, sizeof(init_msg), 0);
+  recv(client_socket, (char *)&init_msg, sizeof(init_msg), 0);
   printf("Receiving file: %s, Size: %llu bytes\n", init_msg.filename, init_msg.filesize);
 
   // Create the full file path in the designated folder
@@ -90,7 +90,7 @@ handleFileTransfer(SOCKET client_socket) {
   }
 
   // Open the file to write to
-  FILE* file = fopen(filePath, "wb");
+  FILE *file = fopen(filePath, "wb");
   if (!file) {
     printf("Failed to open file for writing: %s\n", filePath);
     return;
@@ -100,7 +100,7 @@ handleFileTransfer(SOCKET client_socket) {
   size_t total_received = 0;
   while (total_received < init_msg.filesize) {
     // TODO: add support for partial reads.
-    if (recv(client_socket, (char*)&chunk_msg, sizeof(chunk_msg), 0) <= 0) {
+    if (recv(client_socket, (char *)&chunk_msg, sizeof(chunk_msg), 0) <= 0) {
       printf("Error receiving file chunk.\n");
       fclose(file);
       return;
@@ -112,7 +112,7 @@ handleFileTransfer(SOCKET client_socket) {
   }
 
   // Receive FileCompleteMessage
-  recv(client_socket, (char*)&header, sizeof(header), 0);
+  recv(client_socket, (char *)&header, sizeof(header), 0);
   if (header.type != MSG_TYPE_FILE_COMPLETE) {
     printf("Error receiving file complete message.\n");
   } else {
@@ -122,12 +122,12 @@ handleFileTransfer(SOCKET client_socket) {
   fclose(file);
 }
 
-void
+internal void
 compile(SOCKET client_socket) {
   puts("compiling...");
 
   FileInitMessage init_msg;
-  recv(client_socket, (char*)&init_msg, sizeof(init_msg), 0);
+  recv(client_socket, (char *)&init_msg, sizeof(init_msg), 0);
 
   if (init_msg.type != FILE_SOURCE_FILE) {
     puts("init_msg.type != FILE_SOURCE_FILE");
@@ -136,7 +136,7 @@ compile(SOCKET client_socket) {
 
   char filePath[MAX_PATH];
   snprintf(filePath, MAX_PATH, "%s\\%s", sources_dir, init_msg.filename);
-  FILE* file = fopen(filePath, "wb");
+  FILE *file = fopen(filePath, "wb");
   if (!file) {
     printf("Failed to open file for writing: %s\n", filePath);
     return;
@@ -147,7 +147,7 @@ compile(SOCKET client_socket) {
   size_t total_received = 0;
   while (total_received < init_msg.filesize) {
     // TODO: add support for partial reads.
-    if (recv(client_socket, (char*)&chunk_msg, sizeof(chunk_msg), 0) <= 0) {
+    if (recv(client_socket, (char *)&chunk_msg, sizeof(chunk_msg), 0) <= 0) {
       printf("Error receiving file chunk.\n");
       fclose(file);
       return;
@@ -160,7 +160,7 @@ compile(SOCKET client_socket) {
 
   // Receive FileCompleteMessage
   ProtocolHeader header;
-  recv(client_socket, (char*)&header, sizeof(header), 0);
+  recv(client_socket, (char *)&header, sizeof(header), 0);
   if (header.type != MSG_TYPE_FILE_COMPLETE) {
     printf("Error receiving file complete message.\n");
   } else {
@@ -220,7 +220,7 @@ compile(SOCKET client_socket) {
     char obj_file_path[MAX_PATH];
     snprintf(obj_file_path, MAX_PATH, "%s\\%s.obj", artifacts_dir, file_name_no_extension);
 
-    FILE* obj_file = fopen(obj_file_path, "rb");
+    FILE *obj_file = fopen(obj_file_path, "rb");
     if (!obj_file) {
       // This is bad. improve error handling here.
       printf("obj file not found!");
@@ -246,7 +246,7 @@ handle_command(SOCKET client_socket) {
 
   // Receive ProtocolHeader. Then check the header.type  to determine the next message read by recv should be
   // MSG_TYPE_FILE_INIT.
-  int result = recv(client_socket, (char*)&header, sizeof(header), 0);
+  s32 result = recv(client_socket, (char *)&header, sizeof(header), 0);
   if (result == 0) {
     // Graceful disconnection by the remote peer
     printf("Socket disconnected gracefully.\n");
@@ -254,7 +254,7 @@ handle_command(SOCKET client_socket) {
   }
 
   if (result == SOCKET_ERROR) {
-    int error = WSAGetLastError();
+    s32 error = WSAGetLastError();
     if (error == WSAECONNRESET) {
       // Connection reset by peer
       printf("Socket disconnected forcibly.\n");
@@ -289,7 +289,7 @@ handle_command(SOCKET client_socket) {
 int
 main() {
   // Local\\warp
-  bool ok = create_app_data_folder(warp_dir, "Warp", NULL);
+  b8 ok = create_app_data_folder(warp_dir, "Warp", NULL);
   if (!ok) {
     printf("Failed to create the warp folder.");
     return 1;
@@ -339,8 +339,8 @@ main() {
   server.sin_addr.s_addr = INADDR_ANY;
   server.sin_port = htons(PORT);
 
-  if (bind(server_socket, (struct sockaddr*)&server, sizeof(server)) == SOCKET_ERROR) {
-    int err_code = WSAGetLastError();
+  if (bind(server_socket, (struct sockaddr *)&server, sizeof(server)) == SOCKET_ERROR) {
+    s32 err_code = WSAGetLastError();
     printf("Bind failed. Error Code: %d\n", err_code);
 
     switch (err_code) {
@@ -379,7 +379,7 @@ reconnect:
     return EXIT_FAILURE;
   }
 
-  while (true) {
+  while (1) {
     puts("Waiting for next command...");
     if (handle_command(client_socket) == -1) {
       goto reconnect;
